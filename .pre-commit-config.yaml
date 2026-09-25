@@ -1,0 +1,67 @@
+# managed-by: claude-config sha256=2181e4acb07392c3
+# Généré automatiquement. Tant que ce fichier n'est pas modifié, il est mis à jour
+# quand les dépendances du projet changent. Dès qu'il est modifié à la main, il
+# devient le tien et n'est plus jamais touché.
+# Un seul hook en échec = commit refusé. Tout vérifier : pre-commit run --all-files
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+
+  - repo: local
+    hooks:
+      - id: forbid-env-files
+        name: "interdire les fichiers .env"
+        entry: "Seul .env.example peut être commité."
+        language: fail
+        files: "(^|/)\\.env(\\..+)?$"
+        exclude: "(^|/)\\.env\\.example$"
+      - id: forbid-generated-files
+        name: "interdire les fichiers générés"
+        entry: "Fichiers générés : à mettre dans le .gitignore, pas dans le dépôt."
+        language: fail
+        files: "(^|/)(__pycache__|\\.venv|\\.mypy_cache|\\.ruff_cache|\\.pytest_cache|vendor|node_modules|public/build|public/hot)/|\\.py[co]$"
+      - id: uv-lock
+        name: "uv.lock à jour"
+        entry: "uv lock --check"
+        language: system
+        files: "^(pyproject\\.toml|uv\\.lock)$"
+        pass_filenames: false
+      - id: ruff-format
+        name: "ruff format"
+        entry: "uv run ruff format"
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-check
+        name: "ruff check"
+        entry: "uv run ruff check --fix --exit-non-zero-on-fix"
+        language: system
+        types_or: [python, pyi]
+      - id: mypy
+        name: "mypy"
+        entry: "uv run mypy"
+        language: system
+        types_or: [python, pyi]
+      - id: pytest
+        name: "pytest (suite complète)"
+        entry: "scripts/git-hooks/tests.sh uv run pytest -q"
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: commit-message
+        name: "message de commit (Conventional Commits, sans IA)"
+        entry: "scripts/git-hooks/check-commit-msg.sh"
+        language: script
+        stages: [commit-msg]
