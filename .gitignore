@@ -22,7 +22,8 @@ htmlcov/
 !.env.example
 
 # ML artifacts: datasets and trained models stay out of Git
-data/
+data/*
+!data/README.md
 models/
 .ipynb_checkpoints/
 
