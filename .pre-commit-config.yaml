@@ -1,4 +1,4 @@
-# managed-by: claude-config sha256=2181e4acb07392c3
+# managed-by: claude-config sha256=3dfdd3362945eca5
 # Généré automatiquement. Tant que ce fichier n'est pas modifié, il est mis à jour
 # quand les dépendances du projet changent. Dès qu'il est modifié à la main, il
 # devient le tien et n'est plus jamais touché.
@@ -32,13 +32,18 @@ repos:
         name: "interdire les fichiers générés"
         entry: "Fichiers générés : à mettre dans le .gitignore, pas dans le dépôt."
         language: fail
-        files: "(^|/)(__pycache__|\\.venv|\\.mypy_cache|\\.ruff_cache|\\.pytest_cache|vendor|node_modules|public/build|public/hot)/|\\.py[co]$"
+        files: "(^|/)(__pycache__|\\.venv|\\.mypy_cache|\\.ruff_cache|\\.pytest_cache|vendor|node_modules|public/build|public/hot|mlruns)/|\\.py[co]$|(^|/)mlflow\\.db$"
       - id: uv-lock
         name: "uv.lock à jour"
         entry: "uv lock --check"
         language: system
         files: "^(pyproject\\.toml|uv\\.lock)$"
         pass_filenames: false
+      - id: nbstripout
+        name: "notebooks : retirer les sorties avant commit"
+        entry: "uvx nbstripout"
+        language: system
+        types: [jupyter]
       - id: ruff-format
         name: "ruff format"
         entry: "uv run ruff format"
@@ -51,12 +56,13 @@ repos:
         types_or: [python, pyi]
       - id: mypy
         name: "mypy"
-        entry: "uv run mypy"
+        entry: "env MYPYPATH=src uv run mypy"
         language: system
         types_or: [python, pyi]
+        require_serial: true
       - id: pytest
-        name: "pytest (suite complète)"
-        entry: "scripts/git-hooks/tests.sh uv run pytest -q"
+        name: "pytest (suite complète hors évals IA)"
+        entry: "scripts/git-hooks/tests.sh uv run pytest -q -m 'not eval'"
         language: system
         pass_filenames: false
         always_run: true
