@@ -3,7 +3,8 @@
 Les données ne sont **pas committées** : seul ce fichier est suivi par Git. Pour les régénérer :
 
 ```bash
-uv run python -m review_pilot.dataset
+uv run python -m review_pilot.data.download   # échantillon brut → data/raw/
+uv run python -m review_pilot.data.build      # jeux nettoyés → data/processed/
 ```
 
 Le premier lancement télécharge environ 1,1 Go dans `data/.cache/` (cache Hugging Face).
@@ -28,8 +29,26 @@ data/
 ├── raw/              # échantillon brut, jamais modifié à la main
 │   ├── train.parquet # 50 000 avis
 │   └── test.parquet  # 10 000 avis
-└── processed/        # données transformées (étapes suivantes)
+└── processed/        # jeux nettoyés, recréés par review_pilot.data.build
+    ├── train.parquet # 44 896 avis
+    ├── val.parquet   # 4 989 avis (validation, 10 % du train, stratifiée)
+    └── test.parquet  # 9 975 avis
 ```
+
+## Nettoyage (`data/processed/`)
+
+Règles décidées et vérifiées dans [notebooks/02_data_cleaning.ipynb](../notebooks/02_data_cleaning.ipynb),
+appliquées à l'identique au train et au test :
+
+1. phrases collées séparées (« snap.But » → « snap. But ») ;
+2. entités HTML décodées, vraies balises HTML retirées (les marqueurs comme `<sigh>` sont gardés) ;
+3. avis non anglais retirés (moins de 5 % de mots anglais très courants) ;
+4. e-mails et téléphones masqués (`[EMAIL]`, `[PHONE]`) ;
+5. quasi-doublons retirés ;
+6. validation : 10 % du train, découpage stratifié, graine 42.
+
+Des contrôles de qualité arrêtent la création des données en cas de problème. Le détail de
+chaque étape est dans [reports/data_quality.md](../reports/data_quality.md).
 
 ## Échantillonnage
 

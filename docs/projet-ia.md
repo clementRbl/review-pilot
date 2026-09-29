@@ -1,11 +1,11 @@
 # Suivi du projet IA / data : ReviewPilot — classification de sentiment
 
 - **Type** : ML (classification de texte binaire)
-- **Phase en cours** : 2 — données
-- **Dernière mise à jour** : 2026-09-28
+- **Phase en cours** : 3 — features + baseline
+- **Dernière mise à jour** : 2026-09-29
 
 ## Déjà fait avant le démarrage du suivi
-- **Données** : échantillon reproductible d'Amazon Polarity (50 000 avis train, 10 000 avis test), généré par `uv run python -m review_pilot.dataset` ; source, licence et colonnes dans [data/README.md](../data/README.md).
+- **Données** : échantillon reproductible d'Amazon Polarity (50 000 avis train, 10 000 avis test), généré par `uv run python -m review_pilot.data.download` ; source, licence et colonnes dans [data/README.md](../data/README.md).
 - **EDA** : [notebooks/01_eda.ipynb](../notebooks/01_eda.ipynb) (commit `47c6b1e`). Conclusions principales : classes équilibrées (50,08 % / 49,92 %), le sentiment se lit dans les mots et non dans la forme du texte, 93 avis non anglais et du bruit de format à nettoyer.
 - **Jeu de test** : le split test d'origine n'a servi qu'à vérifier sa structure et l'absence de fuite exacte avec le train ; il n'a jamais servi à évaluer un modèle.
 
@@ -19,15 +19,16 @@
 - **Seuil de succès** : sur le test (phase 5), **rappel négatif ≥ 90 %** avec **précision négative ≥ 85 %**, et nettement meilleur que la baseline mots-clés.
 - **Baseline à battre** : règle mots-clés (compte les mots positifs et négatifs repérés dans l'EDA) (score : mesuré en phase 3). Contrôle minimal : classe majoritaire (~50 % d'accuracy).
 - **Contraintes** : modèle explicable (savoir quels mots ont fait signaler un avis) ; entraînement en local (RTX 3080 10 Go, pas de cloud ni d'API payante) ; traitement par lots, sans contrainte de temps réel. Donnée personnelle repérée (une adresse postale) : retirée au nettoyage.
+- **Mode de travail** : notebook d'abord. Chaque phase est d'abord faite dans `notebooks/NN_nom.ipynb` (structure du notebook d'EDA), validée, puis portée en code testé dans `src/` ; le notebook reste tel quel ensuite. Commit en fin de phase validée, après accord.
 - **Hors périmètre de ce passage** : RAG et agent (passage suivant). Le fine-tuning d'un modèle de langage reste possible en phase 4 si nécessaire pour atteindre le seuil.
-- **Risques connus** : les avis à 3★ (mitigés) sont absents des données alors qu'ils existent en conditions réelles ; données Amazon anglophones d'avant 2013 ; pas d'identifiant ni de catégorie de produit.
+- **Risques connus** : les avis à 3★ (mitigés) sont absents des données alors qu'ils existent en conditions réelles ; données Amazon anglophones d'avant 2013 ; pas d'identifiant ni de catégorie de produit ; le filtre de langue écarte quelques avis anglais très courts (17 dans le train, dont 9 négatifs), qui ne seraient jamais signalés en production.
 
 ## Avancement
 | Phase | Statut | Validée le | Livrables |
 |---|---|---|---|
 | 1. Besoin | validée | 2026-09-28 | cadre ci-dessus |
-| 2. Données (+ split test) | en cours | | |
-| 3. Features + baseline | à faire | | |
+| 2. Données (+ split test) | validée | 2026-09-29 | `notebooks/02_data_cleaning.ipynb` ; `src/review_pilot/data/` (download, clean, split, quality, build) + tests ; `data/processed/` ; `reports/data_quality.md` ; `docs/architecture.md` ; README « Démarrer, pas à pas » |
+| 3. Features + baseline | en cours | | |
 | 4. Modélisation | à faire | | |
 | 5. Évaluation | à faire | | |
 | 6. Explicabilité (SHAP / analyse d'erreurs) | à faire | | |
@@ -35,7 +36,8 @@
 | 7. Industrialisation | à faire | | |
 
 ## Jeu de test
-- **Découpage** : … (aléatoire / temporel / par groupe), fichier : …
+- **Découpage** : split test d'origine d'Amazon Polarity (aléatoire, fait par les auteurs du dataset), nettoyé avec les mêmes règles que le train : 9 975 avis, fichier `data/processed/test.parquet`. Pas de découpage temporel (aucune date) ni par groupe (aucun identifiant de produit).
+- **Validation** : 10 % du train, découpage stratifié, graine 42 : 4 989 avis, `data/processed/val.parquet` (train : 44 896 avis).
 - **Utilisé en évaluation finale le** : jamais
 
 ## Itérations (boucle 3 → 6)
@@ -51,3 +53,7 @@
 | 2026-09-28 | Baseline : règle mots-clés (classe majoritaire en contrôle) | la classe majoritaire (~50 %) est trop facile à battre pour prouver quelque chose |
 | 2026-09-28 | Contraintes : explicable, local, par lots | besoin du service client + apprentissage ; RTX 3080 disponible |
 | 2026-09-28 | RAG et agent hors périmètre de ce passage | un passage `/projet-ia` = un modèle, du besoin à l'industrialisation |
+| 2026-09-29 | Ajout au cadre : mode de travail « notebook d'abord », commit en fin de phase validée après accord | demande explicite : comprendre et valider chaque phase dans un notebook avant le code de production |
+| 2026-09-29 | Test : garder le split test d'origine ; validation : 10 % du train, stratifiée | aucune date ni identifiant de produit pour un autre découpage ; ~2 500 négatifs en validation suffisent pour mesurer le rappel à environ un point près |
+| 2026-09-29 | Données personnelles : e-mails et téléphones **masqués** (`[EMAIL]`, `[PHONE]`) plutôt qu'avis supprimés | la donnée disparaît mais l'avis reste utile ; les motifs d'adresse postale ne trouvaient que des faux positifs |
+| 2026-09-29 | Code de données dans le paquet `review_pilot/data/` (dataset.py devient data/download.py) | une seule commande de création des données : `uv run python -m review_pilot.data.build` |
