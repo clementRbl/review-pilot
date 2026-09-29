@@ -25,6 +25,8 @@ htmlcov/
 data/*
 !data/README.md
 models/
+mlruns/
+mlflow.db
 .ipynb_checkpoints/
 
 # Editors / OS
