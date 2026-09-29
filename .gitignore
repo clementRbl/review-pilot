@@ -24,8 +24,9 @@ htmlcov/
 # ML artifacts: datasets and trained models stay out of Git
 data/*
 !data/README.md
-models/
+/models/
 mlruns/
+mlartifacts/
 mlflow.db
 .ipynb_checkpoints/
 
