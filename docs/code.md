@@ -9,9 +9,9 @@ Une section par phase, complétée à la fin de chaque phase.
 ## Principes communs
 
 - **Seuls les points d'entrée touchent au disque.** Les modules lancés par une commande
-  (`download.py`, `build.py`) lisent et écrivent les fichiers. Les autres (`clean.py`,
-  `split.py`, `quality.py`) reçoivent un tableau et renvoient un tableau : ce sont des
-  **fonctions pures**, testables sans aucun fichier.
+  (`download.py`, `build.py`, `baseline.py`) lisent et écrivent les fichiers. Les autres
+  (`clean.py`, `split.py`, `quality.py`, `keywords.py`, `metrics.py`…) reçoivent des données et
+  renvoient des données : ce sont des **fonctions pures**, testables sans aucun fichier.
 - **Notebook d'abord, code ensuite.** Chaque règle est décidée et vérifiée dans un notebook, puis
   recopiée dans `src/` avec des tests. Le code produit exactement les mêmes résultats que le
   notebook.
@@ -171,3 +171,146 @@ automatiquement à chaque commit (hooks pre-commit).
 | `monkeypatch` (pytest) | remplace temporairement une fonction le temps d'un test |
 | `tmp_path` (pytest) | un dossier temporaire neuf pour chaque test, supprimé ensuite |
 | `@pytest.mark.parametrize` | lance le même test sur plusieurs cas, un par ligne de la liste |
+
+## Phase 3 : features et baseline
+
+Une commande, lancée depuis la racine du projet, après `review_pilot.data.build` :
+
+```text
+uv run python -m review_pilot.models.baseline
+        │  baseline.py est le chef d'orchestre :
+        │    1. lit data/processed/train.parquet et val.parquet (jamais le test)
+        │    2. classe majoritaire : prédit toujours la classe la plus fréquente du train
+        │    3. règle mots-clés : keywords.py apprend les listes sur le train,
+        │       puis metrics.py choisit la taille des listes et le seuil sur la validation
+        │    4. tracking.py ouvre l'expérience MLflow « phase-3-baseline »
+        ▼
+2 runs MLflow (majority, keywords) : réglages, scores, fichiers joints
+  → mlflow.db (runs, réglages, scores) et mlartifacts/ (keywords.json, confusion_matrix.json)
+```
+
+Résultat attendu, identique au notebook 03 : **400 mots par liste, seuil 2, rappel négatif
+0,770, précision négative 0,876** sur la validation.
+
+### `labels.py` : les deux classes
+
+`NEGATIVE = 0` et `POSITIVE = 1`. Écrire `labels == NEGATIVE` plutôt que `labels == 0` dit ce
+que l'on cherche, et évite de se tromper de convention.
+
+### `features/text.py` : des avis aux mots et aux nombres
+
+| Élément | Rôle |
+|---|---|
+| `tokenize(text)` | découpe en mots : minuscules, suites de lettres et d'apostrophes (`"Don't BUY"` → `["don't", "buy"]`) |
+| `build_vectorizer()` | crée le TF-IDF du projet : mots seuls + paires de mots, termes vus dans au moins 5 avis, `sublinear_tf` |
+
+Le TF-IDF n'est encore utilisé par aucune commande : il est prêt pour les modèles de la phase 4.
+`build_vectorizer()` renvoie un TF-IDF **vide** ; c'est à celui qui l'utilise d'appeler `fit` sur
+le train, puis `transform` sur le reste.
+
+### `models/keywords.py` : la règle mots-clés
+
+| Élément | Rôle |
+|---|---|
+| `document_frequency(tokens)` | compte dans combien d'avis apparaît chaque mot (une fois par avis) |
+| `KeywordClassifier(n_words, min_reviews, threshold)` | la règle, avec ses trois réglages (par défaut 400, 100, 2) |
+| `.fit(texts, labels)` | apprend sur le train : garde les mots vus dans au moins `min_reviews` avis, calcule leur ratio (part des négatifs ÷ part des positifs), et les classe du plus négatif au plus positif (`ranking_`) |
+| `.keyword_lists()` | les `n_words` premiers mots du classement (négatifs) et les `n_words` derniers (positifs) |
+| `.negativity_score(texts)` | pour chaque avis : nombre de mots négatifs − nombre de mots positifs |
+| `.predict(texts)` | label prédit : `NEGATIVE` si le score atteint le seuil, `POSITIVE` sinon |
+
+- Même interface qu'un modèle scikit-learn (`fit` puis `predict`), sans en hériter : la classe
+  reste simple et entièrement typée.
+- Le classement est calculé **une seule fois** par `fit` ; changer `n_words` ou `threshold`
+  ensuite ne demande pas de réapprendre. C'est ce qui rend l'essai de plusieurs tailles rapide.
+- Les ratios sont arrondis à 2 décimales et les égalités départagées par ordre alphabétique,
+  comme dans le notebook : les listes sont identiques d'une exécution à l'autre.
+- Deux erreurs explicites : `NotFittedModelError` si on prédit avant `fit`, `KeywordListError`
+  si l'on demande plus de mots qu'il n'y a de mots fréquents (les deux listes se chevaucheraient).
+
+### `evaluation/metrics.py` : les métriques du projet
+
+| Fonction | Rôle |
+|---|---|
+| `negative_metrics(labels, flagged)` | les 5 scores du projet : `neg_recall`, `neg_precision`, `neg_f1`, `pos_f1`, `accuracy` ; un avis « signalé » (`flagged`) est prédit négatif |
+| `confusion_counts(labels, flagged)` | les 4 cases de la matrice de confusion : `negative_flagged`, `negative_missed`, `positive_flagged`, `positive_kept` |
+| `threshold_table(score, labels)` | les scores obtenus pour chaque seuil entier, du plus petit au plus grand score |
+| `best_threshold(table)` | le seuil au meilleur rappel parmi ceux dont la précision atteint `PRECISION_MIN` (0,85) ; lève `ThresholdNotFoundError` s'il n'y en a aucun |
+
+Ces fonctions ne connaissent pas la règle mots-clés : elles serviront telles quelles pour les
+modèles de la phase 4.
+
+### `tracking.py` : la connexion à MLflow
+
+`use_experiment(name)` pointe MLflow vers `mlflow.db` (à la racine du projet) et crée
+l'expérience au besoin, avec ses fichiers joints dans `mlartifacts/`. Sans cet emplacement
+explicite, MLflow rangerait les fichiers dans un dossier `mlruns/` créé là où l'on se trouve :
+le notebook (lancé depuis `notebooks/`) et les commandes (lancées depuis la racine) ne les
+mettraient pas au même endroit.
+
+### `models/baseline.py` : la commande
+
+| Élément | Rôle |
+|---|---|
+| `BaselineResult` | un essai à enregistrer : nom, réglages, scores, fichiers joints |
+| `load_split(name)` | lit un jeu propre (`"train"`, `"validation"`) |
+| `majority_baseline(train, val)` | la classe majoritaire du train, mesurée sur la validation |
+| `keyword_baseline(train, val, n_words_grid, min_reviews)` | apprend la règle sur le train ; pour chaque taille de liste, cherche le meilleur seuil sur la validation ; garde la taille au meilleur rappel |
+| `log_result(result)` | enregistre un essai dans MLflow (un *run*) |
+| `main()` | enchaîne le tout et affiche les scores |
+
+Une taille de liste qui ne peut pas atteindre la précision de 85 % est **écartée** (et non
+bloquante) ; si aucune n'y parvient, la commande s'arrête avec `ThresholdNotFoundError`.
+
+### `errors.py` : trois erreurs de plus
+
+| Erreur | Quand |
+|---|---|
+| `ThresholdNotFoundError` | aucun seuil ne tient le plancher de précision |
+| `NotFittedModelError` | un modèle est utilisé avant `fit` |
+| `KeywordListError` | pas assez de mots fréquents pour deux listes distinctes |
+
+Chacune fabrique elle-même son message à partir de quelques valeurs
+(`ThresholdNotFoundError(0.85)` → « aucun seuil n'atteint une précision négative de 85% ») : le
+texte de l'erreur est écrit à un seul endroit.
+
+### Un avis, du début à la fin
+
+Titre `"Junk"`, contenu `"Stopped working, I want a refund"`, label réel 0 (négatif).
+
+| Étape | Résultat |
+|---|---|
+| texte lu (`full_text`) | `"Junk Stopped working, I want a refund"` |
+| mots (`tokenize`) | `junk`, `stopped`, `working`, `i`, `want`, `a`, `refund` |
+| mots-clés trouvés | négatifs : `junk`, `stopped`, `refund` ; positifs : aucun |
+| score (`negativity_score`) | 3 − 0 = **3** |
+| décision (`predict`) | 3 ≥ 2 (le seuil) → **signalé**, label prédit 0 : bonne réponse |
+
+**Et le seuil 2, d'où vient-il ?** Avec 400 mots par liste, `threshold_table` donne sur la
+validation : seuil 1 → rappel 84,8 %, précision 83,3 % (sous le plancher, refusé) ; seuil 2 →
+rappel 77,0 %, précision 87,6 % (accepté). `best_threshold` garde donc 2.
+
+### Les tests
+
+| Fichier | Ce qu'il vérifie |
+|---|---|
+| `features/test_text.py` | le découpage en mots ; la présence des paires (« not good ») ; l'oubli des termes trop rares ; **aucune fuite** : un mot vu seulement en validation n'entre pas dans le vocabulaire |
+| `models/test_keywords.py` | le classement sur un mini-train calculé à la main ; les égalités par ordre alphabétique ; le filtre des mots rares ; **aucune fuite** : les listes ne contiennent que des mots du train ; le score compte chaque occurrence ; les deux erreurs (`NotFittedModelError`, `KeywordListError`) |
+| `evaluation/test_metrics.py` | les scores sur 4 avis calculés à la main ; les cases de la matrice de confusion ; le choix du seuil (meilleur rappel, plancher respecté, plus petit seuil en cas d'égalité) ; l'erreur quand aucun seuil ne convient |
+| `models/test_baseline.py` | la classe majoritaire ; le choix de la taille et du seuil ; l'arrêt si aucune taille ne tient le plancher ; la commande complète, avec MLflow dans un dossier temporaire |
+
+Un avertissement interne de MLflow (option dépréciée de SQLAlchemy 2.1) est ignoré dans la
+configuration de pytest, et **seulement celui-là** : tout autre avertissement fait échouer les tests.
+
+### Notions Python rencontrées
+
+| Notion | En une phrase |
+|---|---|
+| `Counter` | un dictionnaire qui compte : `Counter(["a", "b", "a"])` donne `{"a": 2, "b": 1}` |
+| `Self` | le type de retour « la même classe », utilisé par `fit` qui renvoie le modèle lui-même |
+| attribut en `_` final (`ranking_`) | convention scikit-learn : un attribut qui n'existe qu'après `fit` |
+| `sort_values(kind="stable")` | un tri qui garde l'ordre d'origine des égalités |
+| `try` / `except … continue` | intercepter une erreur **attendue** pour passer au cas suivant, jamais pour la cacher |
+| `field(default_factory=dict)` | valeur par défaut d'un attribut de dataclass : un dictionnaire neuf pour chaque objet |
+| `with mlflow.start_run():` | ouvre un run, et le ferme même en cas d'erreur (un *gestionnaire de contexte*) |
+| `monkeypatch.setattr(module, "CONST", …)` | remplace une constante le temps d'un test (ici, une grille plus petite) |

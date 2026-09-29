@@ -35,17 +35,25 @@ uv run python -m review_pilot.data.build      # → data/processed/{train,val,te
                                               #   + reports/data_quality.md
 ```
 
-**4. Ouvrir les notebooks**, dans l'ordre : dans VS Code, choisir le noyau `.venv`, puis « Run All ».
+**4. Mesurer la baseline** (le score à battre) et l'enregistrer dans MLflow
+
+```bash
+uv run python -m review_pilot.models.baseline # → runs dans mlflow.db, fichiers dans mlartifacts/
+uv run mlflow ui --backend-store-uri sqlite:///mlflow.db   # voir les runs : http://127.0.0.1:5000
+```
+
+**5. Ouvrir les notebooks**, dans l'ordre : dans VS Code, choisir le noyau `.venv`, puis « Run All ».
 
 | Notebook | Phase | Contenu |
 |---|---|---|
 | [01_eda.ipynb](notebooks/01_eda.ipynb) | exploration | ce que contiennent les avis, ce qui trahit le sentiment |
 | [02_data_cleaning.ipynb](notebooks/02_data_cleaning.ipynb) | 2 — données | les règles de nettoyage et le découpage, vérifiés |
+| [03_features_baseline.ipynb](notebooks/03_features_baseline.ipynb) | 3 — features et baseline | la règle mots-clés, son seuil, le TF-IDF ; écrit `reports/figures/` et des runs MLflow |
 
 Les sorties des notebooks (tableaux, graphiques) ne sont pas versionnées : elles sont effacées
 à chaque commit. Relancer « Run All » pour les retrouver.
 
-**5. Vérifier que tout est en ordre**
+**6. Vérifier que tout est en ordre**
 
 ```bash
 uv run pytest --cov                   # tests + couverture
@@ -57,10 +65,11 @@ uv run pre-commit run --all-files     # tous les contrôles (format, lint, types
 | Je modifie… | Je relance… |
 |---|---|
 | les dépendances (`pyproject.toml`) | `uv sync` |
-| le téléchargement (`data/download.py` : taille de l'échantillon, révision) | étape 2, puis étape 3 |
-| une règle de données (`data/clean.py`, `split.py`, `quality.py`) | étape 3, puis les tests (étape 5) |
+| le téléchargement (`data/download.py` : taille de l'échantillon, révision) | étapes 2, 3 et 4 |
+| une règle de données (`data/clean.py`, `split.py`, `quality.py`) | étapes 3 et 4, puis les tests (étape 6) |
+| la baseline (`models/keywords.py`, `baseline.py`) ou les métriques (`evaluation/metrics.py`) | étape 4, puis les tests (étape 6) |
 | un notebook | « Run All » dans le notebook |
-| n'importe quel code | étape 5 avant de committer |
+| n'importe quel code | étape 6 avant de committer |
 
 ## Pour aller plus loin
 
