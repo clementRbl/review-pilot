@@ -1,6 +1,6 @@
 """Télécharge un échantillon reproductible du dataset Amazon Polarity dans data/raw/.
 
-À lancer depuis la racine du projet : ``uv run python -m review_pilot.dataset``.
+À lancer depuis la racine du projet : ``uv run python -m review_pilot.data.download``.
 """
 
 import logging
