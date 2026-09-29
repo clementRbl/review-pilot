@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "huggingface-hub>=2.0.0",
+    "mlflow>=3.16.1",
     "pandas>=3.0.6",
     "pyarrow>=25.0.1",
     "scikit-learn>=1.9.1",
@@ -52,7 +53,11 @@ files = ["src", "tests"]
 testpaths = ["tests"]
 addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
 xfail_strict = true
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # Interne à MLflow 3.16 : option dépréciée de SQLAlchemy 2.1, hors de notre code.
+    "ignore:The ``noload`` loader strategy is deprecated:DeprecationWarning",
+]
 
 [tool.coverage.run]
 source = ["src"]
