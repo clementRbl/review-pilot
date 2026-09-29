@@ -66,6 +66,8 @@ uv run pre-commit run --all-files     # tous les contrôles (format, lint, types
 
 - [docs/architecture.md](docs/architecture.md) : la « ligne de vie » du projet, qui produit et lit
   quoi, avec un schéma.
+- [docs/code.md](docs/code.md) : le guide du code, fichier par fichier et fonction par fonction,
+  avec les tests et les notions Python rencontrées.
 - [docs/projet-ia.md](docs/projet-ia.md) : le suivi des phases (besoin, métrique, décisions).
 - [data/README.md](data/README.md) : la source des données, leur licence et les règles de nettoyage.
 

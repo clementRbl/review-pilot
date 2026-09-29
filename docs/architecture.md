@@ -2,7 +2,8 @@
 
 Ce document montre comment les fichiers du projet s'enchaînent, des avis bruts jusqu'au modèle :
 qui produit quoi, qui lit quoi, et avec quelle commande. Il est mis à jour à la fin de chaque
-phase du projet (suivi des phases : [projet-ia.md](projet-ia.md)).
+phase du projet (suivi des phases : [projet-ia.md](projet-ia.md) ; détail du code, fonction par
+fonction : [code.md](code.md)).
 
 ## Vue d'ensemble
 
@@ -73,7 +74,8 @@ review-pilot/
 ├── tests/unit/              # tests du code de src/ (un fichier par module)
 └── docs/
     ├── projet-ia.md         # suivi des phases : cadre, décisions, avancement
-    └── architecture.md      # ce document
+    ├── architecture.md      # ce document
+    └── code.md              # guide du code, fichier par fichier
 ```
 
 ## Qui appelle quoi dans `src/`
